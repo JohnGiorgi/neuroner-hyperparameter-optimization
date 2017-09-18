@@ -8,18 +8,10 @@ import argparse
 from datetime import datetime
 from hyperopt import pyll, fmin, tpe, hp
 
-
 # https://vooban.com/en/tips-articles-geek-stuff/hyperopt-tutorial-for-optimizing-neural-networks-hyperparameters/
 
-# f1_score_on_test () needs to coordinate a couple of things
-# 1) get current hyperparameter values from (f?), update a config file [DONE]
-# 2) run NeuroNER
-# 3) somehow check the best performing (on valid) epochs score (on test) - so include test folder during training [DONE]
-# 4) the score needs to make it to f(), which returns it
 # thats it... the last thing to figure out is how many cycles to run. depends on training time
 # also, need to figure out the best way to define the parameter spaces...
-
-'hyperopt_run_{}'.format(datetime.now().strftime("%y-%m-%d-%H-%M"))
 
 class cd:
     """Context manager for changing the current working directory."""
@@ -34,6 +26,7 @@ class cd:
         os.chdir(self.savedPath) 
 
 def initialize_argparse():
+	'''Initilize and return an argparse object.'''
 	parser = argparse.ArgumentParser(description='Tune the hyperparameters of a NeuroNER model using Hyperopt')
 	# positional arguments
 	parser.add_argument('working_directory', help="Path to the 'src' directory of your NeuroNER install")
@@ -41,7 +34,7 @@ def initialize_argparse():
 	parser.add_argument('-p', '--parameter_filepath', help="Filepath to NeuroNER parameter file", default = 'hyperopt_parameters.ini')
 	parser.add_argument('-m', '--max_evals', help="Maximum number of evaluations to perform during optmization", default = 100, type=int)
 	parser.add_argument('-o', '--output_folder', help="Folder to save NeuroNER output from runs", default = '../output/hyperopt')
-
+	parser.add_argument('-ss', '--stochastic_samples', help="Print a few (random) stochastic samples from the hyperparameter space", default = False, action='store_true')
 	return parser
 def extract_f1_score(file_obj):
 	'''Extracts the F1 Score from a given NeuroNER text evaluation file object.'''
@@ -95,13 +88,10 @@ def update_config(hyperparameters):
 	
 	with open(param_filepath, 'w') as configfile:
 		config.write(configfile)
-
 def run_model():
 	'''Run NeuroNER using parameter file specied by parameter_filepath argument.'''
 	param_filepath = args.parameter_filepath
-	with cd('src'):
-		os.system('python3 main.py --parameters_filepath {}'.format(param_filepath))
-
+	os.system('python3 main.py --parameters_filepath {}'.format(param_filepath))
 def hyperopt_step(hyperparameters):
 	'''Coordinates one optimzation step: by updating hyperparameters from the space, saving them to the config, 
 	running NeuroNER with this config, and then returning the F1 score on the test set from the best performing model 
@@ -117,12 +107,11 @@ def hyperopt_step(hyperparameters):
 	run_model()
 
 	best_f1_score = f1_best_epoch_on_test(neuroner_run_path)
-	return best_f1_score
-	
+	return best_f1_score	
 def objective(space):
 	'''Returns the F1 score of the model for the current hyperparameter values.
 	Serves as the objective function for hyperopt.'''
-	
+
 	# hyperparameters
 	character_embedding_dimension = space['character_embedding_dimension']
 	learning_rate = space['learning_rate']
@@ -142,15 +131,14 @@ def objective(space):
 	current_best_f1_score = hyperopt_step(current_hyperparams)
 
 	return current_best_f1_score
-
-if __name__ == '__main__':
-	'''
-	# Print a few random (stochastic) samples from the space:
-	# initilize a pretty printer
+def stochastic_sample(space):
+	'''Print a few random (stochastic) samples from the space.'''
 	pp = pprint.PrettyPrinter(indent=4, width=100) 
 	for _ in range(10):
-    	pp.pprint(pyll.stochastic.sample(space))
-	'''
+		pp.pprint(pyll.stochastic.sample(space))
+
+
+if __name__ == '__main__':
 
 	################################### change parameters here ###################################
 	# hyperparameter space to optmize
@@ -165,28 +153,30 @@ if __name__ == '__main__':
 	}
 	################################################################################################
 
-
 	# parse CL arguments
 	parser = initialize_argparse()
 	args = parser.parse_args()
-	param_filepath = args.parameter_filepath # path to NeuroNER parameters
-	output_folder = args.output_folder # path to save NeuroNER runs
-	working_directory = args.working_directory # path to top level of NeuroNEr install
-	# move into top level of NeuroNER install
-	cd(args.working_directory)
-	# create output for NeuroNER runs
-	os.makedirs(output_folder, exist_ok=True)
 
-	# use hyperopt to minimize the objective function by optmizing the hyperparameter space
-	best = fmin(
-	fn = objective, # the objective function to minimize
-	space = space,
-	algo = tpe.suggest,
-	max_evals = args.max_evals	
-	)
+	if args.stochastic_samples: stochastic_sample(space) # print random samples from space
+
+	param_filepath = str(args.parameter_filepath) # path to NeuroNER parameters
+	output_folder = str(args.output_folder) # path to save NeuroNER runs
+	working_directory = str(args.working_directory) # path to top level of NeuroNEr install
+	max_evals = int(args.max_evals) # max number of evaluations to perform during optimization
+	
+
+	# move into src directory of NeuroNER install
+	with cd(working_directory):
+		# create output for NeuroNER runs
+		os.makedirs(output_folder, exist_ok=True)
+
+		# use hyperopt to minimize the objective function by optmizing the hyperparameter space
+		best = fmin(
+		fn = objective, # the objective function to minimize
+		space = space,
+		algo = tpe.suggest,
+		max_evals = max_evals	
+		)
 
 	print("Found minimum after {} trials:".format(args.max_evals))
 	print(best)
-
-
-
