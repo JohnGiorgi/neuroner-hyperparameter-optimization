@@ -1,14 +1,17 @@
 # Optimize Hyperparameters of NeuroNER model using Hyperopt
 
+*MEANT FOR INTERNAL USE!*
+
 #### Requirements
 - Python **3**.
-- [hyperopt]() (`pip install hyperopt`)
-- all requirements for [NeuroNER]()
+- [Hyperopt](https://hyperopt.github.io/hyperopt/) (`pip install hyperopt`).
+- all requirements for [NeuroNER](http://neuroner.com/).
 
 #### Usage
 1. Prepare training, test and dev data. *You must using all three partitions will training in order for this script to work.*
 2. Setup a config file for NeuroNER (by default, the script will look for this in `path/to/NeuroNER/src/hyperopt_parameters.ini`).
-3. Run `hyperparameter_optimization.py`. You must provide the path to the `src` directory of your NeuroNER install as a positional argument. *e.g*.
+3. At the bottom of `hyperparameter_optimization.py`, set the hyperparameter space for each hyperparameter to be optimized.
+4. Run `hyperparameter_optimization.py`. You must provide the path to the `src` directory of your NeuroNER install as a positional argument. *e.g*.
 
 ```
 python hyperparameter_optimization.py path/to/NeuroNER/src
@@ -20,4 +23,4 @@ python hyperparameter_optimization.py path/to/NeuroNER/src
 
 #### How the script works?
 
-The script works by coordinating output from `NeuroNER` runs with `hyperopt` optimization. Essentially, hyperparameters to train are given a 'space', then NeuroNER is ran using hyperparameters from this space. The F1 score on the test set (using the model checkpoint with best performance on the validation set) is the minimization objective. The optmization algorithm used is the **Tree-structured Parzen Estimator (TPE)** algorithm.
+The script works by coordinating output from `NeuroNER` runs with `hyperopt` optimization. Essentially, hyperparameters to train are given a 'space', then NeuroNER is ran using hyperparameters from this space. The F1 score on the test set (using the model checkpoint with best performance on the validation set) is the minimization objective. The optimization algorithm used is the **Tree-structured Parzen Estimator (TPE)** algorithm.
