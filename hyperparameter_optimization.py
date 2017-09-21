@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
+import sys
 import pprint
 import configparser
 import argparse
@@ -138,6 +139,7 @@ def stochastic_sample(space):
 	pp = pprint.PrettyPrinter(indent=4, width=100) 
 	for _ in range(10):
 		pp.pprint(pyll.stochastic.sample(space))
+	sys.exit()
 
 
 if __name__ == '__main__':
@@ -148,7 +150,7 @@ if __name__ == '__main__':
 	# use this to tune both the char embedding dimension and the char_lstm_hidden state dimension
 	'character_embedding_dimension': hp.randint('character_embedding_dimension', 100),
 
-	'learning_rate': hp.loguniform('learning_rate', 0.001, 0.01), # loguniform best for learning rate
+	'learning_rate': hp.uniform('learning_rate', 0.001, 0.01), # loguniform best for learning rate
 	'gradient_clipping_value': hp.randint('gradient_clipping_value', 6),
 
 	'dropout_rate': hp.uniform('dropout_rate', 0, 1),
