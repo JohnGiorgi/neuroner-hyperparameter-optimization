@@ -24,7 +24,6 @@ class cd:
 
     def __exit__(self, etype, value, traceback):
         os.chdir(self.savedPath) 
-
 def initialize_argparse():
 	'''Initilize and return an argparse object.'''
 	parser = argparse.ArgumentParser(description='Tune the hyperparameters of a NeuroNER model using Hyperopt')
@@ -44,8 +43,11 @@ def extract_f1_score(file_obj):
 	f1_score = round(float(performance_metrics[7]), 2)
 
 	return f1_score
-def f1_best_epoch_on_test(neuroner_run_path):
-	'''Returns the F1 score on test set for best performing epoch as measured on the valid set'''
+def f1_best_epoch_on_test(hyperopt_run_path):
+	'''Returns the F1 score on test set for best performing epoch as measured on the valid set.'''
+	# makes the assumption that NeuroNER only creates one directory at neuroner_run_path
+	neuroner_run_path = os.path.join(hyperopt_run_path, os.listdir(hyperopt_run_path)[0])
+	
 	with cd(neuroner_run_path):
 		# set defaults
 		best_f1_on_valid = 0
@@ -96,17 +98,17 @@ def hyperopt_step(hyperparameters):
 	'''Coordinates one optimzation step: by updating hyperparameters from the space, saving them to the config, 
 	running NeuroNER with this config, and then returning the F1 score on the test set from the best performing model 
 	checkpoint (as measured on the validation set).'''
-	
-	# create a new output directory for NeuroNER run
-	neuroner_run_path = os.path.join(output_folder, 'hyperopt_run_{}'.format(datetime.now().strftime("%y-%m-%d-%H-%M")))
-	os.makedirs(neuroner_run_path, exist_ok=True)
-	hyperparameters['output_folder'] = neuroner_run_path
-	
 	update_config(hyperparameters)
 	
 	run_model()
 
-	best_f1_score = f1_best_epoch_on_test(neuroner_run_path)
+	# create a new output directory for NeuroNER run
+	hyperopt_run_path = os.path.join(output_folder, 'hyperopt_run_{}'.format(datetime.now().strftime("%y-%m-%d-%H-%M")))
+	os.makedirs(hyperopt_run_path, exist_ok=True)
+	hyperparameters['output_folder'] = hyperopt_run_path
+	
+	best_f1_score = f1_best_epoch_on_test(hyperopt_run_path)
+
 	return best_f1_score	
 def objective(space):
 	'''Returns the F1 score of the model for the current hyperparameter values.
@@ -146,10 +148,10 @@ if __name__ == '__main__':
 	# use this to tune both the char embedding dimension and the char_lstm_hidden state dimension
 	'character_embedding_dimension': hp.randint('character_embedding_dimension', 100),
 
-	'learning_rate': hp.uniform('learning_rate', 0.001, 0.01),
-	'gradient_clipping_value': hp.uniform('gradient_clipping_value', 3.0, 5.0),
+	'learning_rate': hp.loguniform('learning_rate', 0.001, 0.01), # loguniform best for learning rate
+	'gradient_clipping_value': hp.randint('gradient_clipping_value', 6),
 
-	'dropout_rate': hp.uniform('dropout_rate', 0.001, 0.01),
+	'dropout_rate': hp.uniform('dropout_rate', 0.1, 0.9),
 	}
 	################################################################################################
 
