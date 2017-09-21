@@ -151,7 +151,7 @@ if __name__ == '__main__':
 	'learning_rate': hp.loguniform('learning_rate', 0.001, 0.01), # loguniform best for learning rate
 	'gradient_clipping_value': hp.randint('gradient_clipping_value', 6),
 
-	'dropout_rate': hp.uniform('dropout_rate', 0.1, 0.9),
+	'dropout_rate': hp.uniform('dropout_rate', 0, 1),
 	}
 	################################################################################################
 
