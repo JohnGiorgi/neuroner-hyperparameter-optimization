@@ -10,11 +10,10 @@ import configparser
 from datetime import datetime
 from hyperopt import pyll, fmin, tpe, hp
 
-# (TODO): Add logging - this would make it convinient to see the best output dir
 # https://vooban.com/en/tips-articles-geek-stuff/hyperopt-tutorial-for-optimizing-neural-networks-hyperparameters/
 
 # thats it... the last thing to figure out is how many cycles to run. depends on training time
-# also, need to figure out the best way to define the parameter spaces...
+
 
 class cd:
     """Context manager for changing the current working directory."""
@@ -125,8 +124,8 @@ def objective(space):
 
 	# is there a better way to store above ^ values in a dictionary?
 	current_hyperparams = {
-	'character_embedding_dimension': character_embedding_dimension,
-	'character_lstm_hidden_state_dimension': character_embedding_dimension,
+	'character_embedding_dimension': int(character_embedding_dimension),
+	'character_lstm_hidden_state_dimension': int(character_embedding_dimension),
 	'learning_rate': learning_rate,
 	'gradient_clipping_value': gradient_clipping_value,
 	'dropout_rate': dropout_rate
@@ -134,8 +133,10 @@ def objective(space):
 
 	# update params, run model, and get F1 score
 	current_best_f1_score = hyperopt_step(current_hyperparams)
-
-	return current_best_f1_score
+	# maximize f1 by minimizing 100 - f1
+	minimization_objective = 100 - current_best_f1_score
+	
+	return minimization_objective
 def stochastic_sample(space):
 	'''Print a few random (stochastic) samples from the space.'''
 	pp = pprint.PrettyPrinter(indent=4, width=100) 
@@ -152,13 +153,14 @@ if __name__ == '__main__':
 	
 	# [ann]
 	# use this to tune both the char embedding dimension and the char_lstm_hidden state dimension
-	'character_embedding_dimension': hp.randint('character_embedding_dimension', 80),
+	'character_embedding_dimension': hp.quniform('character_embedding_dimension', 10, 80, 1),
 		
 	# [training]
 	'learning_rate': hp.uniform('learning_rate', 0.001, 0.01),
 	'gradient_clipping_value': hp.randint('gradient_clipping_value', 6),
 	'dropout_rate': hp.uniform('dropout_rate', 0.2, 0.8)
 	}
+
 	################################################################################################
 
 	# parse CL arguments
@@ -176,7 +178,7 @@ if __name__ == '__main__':
 	with cd(working_directory):
 		# create log file, write start time and date
 		logging.basicConfig(filename='hyperopt.log', level=logging.INFO)
-		logging.info('Starting script at: %s\n%s'%(str(datetime.now())))
+		logging.info('Starting script at: %s'%(str(datetime.now())))
 		# create output for NeuroNER runs
 		os.makedirs(output_folder, exist_ok=True)
 
@@ -188,6 +190,5 @@ if __name__ == '__main__':
 		max_evals = max_evals	
 		)
 
-	logging.info('FOUND MINIMUM AFTER %s TRIALS\n%s'%(max_evals, best)
+	logging.info('FOUND MINIMUM AFTER %s TRIALS\n%s'%(max_evals, best))
 	print("FOUND MINIMUM AFTER {} TRIALS:\n{}".format(args.max_evals, best))
-
