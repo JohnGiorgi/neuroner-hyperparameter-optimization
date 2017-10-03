@@ -3,8 +3,9 @@
 import os
 import sys
 import pprint
-import configparser
+import logging
 import argparse
+import configparser
 
 from datetime import datetime
 from hyperopt import pyll, fmin, tpe, hp
@@ -12,7 +13,11 @@ from hyperopt import pyll, fmin, tpe, hp
 # https://vooban.com/en/tips-articles-geek-stuff/hyperopt-tutorial-for-optimizing-neural-networks-hyperparameters/
 
 # thats it... the last thing to figure out is how many cycles to run. depends on training time
-# also, need to figure out the best way to define the parameter spaces...
+
+# this counter marks the current run. 1 = first run, used to avoid updating hyperparameters on our first run
+# THIS IS TEMPORARY, COME UP WITH A BETTER SOLUTION
+current_run = 1
+
 
 class cd:
     """Context manager for changing the current working directory."""
@@ -64,13 +69,9 @@ def f1_best_epoch_on_test(hyperopt_run_path):
 					if current_f1_score_on_valid > best_f1_on_valid:
 						best_f1_on_valid = current_f1_score_on_valid
 						best_epoch_on_valid = filename.split('_')[0]
-		
-		# get f1 score on test set from best performing epoch on valid
-		test_run_from_best_epoch = '{}_test.txt_conll_evaluation.txt'.format(str(best_epoch_on_valid))
-		with open(test_run_from_best_epoch, 'r') as test_eval:
-			best_f1_on_test = extract_f1_score(test_eval)
-
-	return best_f1_on_test
+	
+	print("[INFO] Best epoch on valid ({}) had F1 score: {}".format(best_epoch_on_valid, best_f1_on_valid))
+	return best_f1_on_valid
 def update_config(hyperparameters):
 	'''Updates the NeuroNER config file with values in hyperparameters.''' 
 	config = configparser.ConfigParser()
@@ -85,7 +86,7 @@ def update_config(hyperparameters):
 	'dropout_rate': 'training',
 	'output_folder': 'dataset'
 	}
-	
+
 	for hp in hyperparameters:
 		config[parameter_file_headers[hp]][hp] = str(hyperparameters[hp])
 	
@@ -99,16 +100,27 @@ def hyperopt_step(hyperparameters):
 	'''Coordinates one optimzation step: by updating hyperparameters from the space, saving them to the config, 
 	running NeuroNER with this config, and then returning the F1 score on the test set from the best performing model 
 	checkpoint (as measured on the validation set).'''
-	update_config(hyperparameters)
-	
-	run_model()
-
 	# create a new output directory for NeuroNER run
 	hyperopt_run_path = os.path.join(output_folder, 'hyperopt_run_{}'.format(datetime.now().strftime("%y-%m-%d-%H-%M")))
 	os.makedirs(hyperopt_run_path, exist_ok=True)
 	hyperparameters['output_folder'] = hyperopt_run_path
 	
+	# if this is the first run, do not update hyperparameters
+	
+	if current_run == 1:
+		print("[INFO] First run, will NOT update hyperparameters...")
+		update_config({'output_folder':hyperopt_run_path}
+		current_run += 1
+	else:
+		print("[INFO] Updating hyperparameters...")
+		update_config(hyperparameters)
+	
+	print("[INFO] Running model...")
+	run_model()
+
+	print("[INFO] Getting F1 score on valid from best performing epoch...")
 	best_f1_score = f1_best_epoch_on_test(hyperopt_run_path)
+	logging.info("F1 score on valid: %s for hyperparameters: %s" % (best_f1_score, hyperparameters))
 
 	return best_f1_score	
 def objective(space):
@@ -123,8 +135,8 @@ def objective(space):
 
 	# is there a better way to store above ^ values in a dictionary?
 	current_hyperparams = {
-	'character_embedding_dimension': character_embedding_dimension,
-	'character_lstm_hidden_state_dimension': character_embedding_dimension,
+	'character_embedding_dimension': int(character_embedding_dimension),
+	'character_lstm_hidden_state_dimension': int(character_embedding_dimension),
 	'learning_rate': learning_rate,
 	'gradient_clipping_value': gradient_clipping_value,
 	'dropout_rate': dropout_rate
@@ -132,8 +144,10 @@ def objective(space):
 
 	# update params, run model, and get F1 score
 	current_best_f1_score = hyperopt_step(current_hyperparams)
-
-	return current_best_f1_score
+	# maximize f1 by minimizing 100 - f1
+	minimization_objective = 100 - current_best_f1_score
+	
+	return minimization_objective
 def stochastic_sample(space):
 	'''Print a few random (stochastic) samples from the space.'''
 	pp = pprint.PrettyPrinter(indent=4, width=100) 
@@ -147,14 +161,17 @@ if __name__ == '__main__':
 	################################### change parameters here ###################################
 	# hyperparameter space to optmize
 	space = {
+	
+	# [ann]
 	# use this to tune both the char embedding dimension and the char_lstm_hidden state dimension
-	'character_embedding_dimension': hp.randint('character_embedding_dimension', 100),
-
-	'learning_rate': hp.uniform('learning_rate', 0.001, 0.01), # loguniform best for learning rate
+	'character_embedding_dimension': hp.quniform('character_embedding_dimension', 10, 80, 1),
+		
+	# [training]
+	'learning_rate': hp.uniform('learning_rate', 0.001, 0.01),
 	'gradient_clipping_value': hp.randint('gradient_clipping_value', 6),
-
-	'dropout_rate': hp.uniform('dropout_rate', 0, 1),
+	'dropout_rate': hp.uniform('dropout_rate', 0.2, 0.8)
 	}
+
 	################################################################################################
 
 	# parse CL arguments
@@ -168,9 +185,11 @@ if __name__ == '__main__':
 	working_directory = str(args.working_directory) # path to top level of NeuroNEr install
 	max_evals = int(args.max_evals) # max number of evaluations to perform during optimization
 	
-
 	# move into src directory of NeuroNER install
 	with cd(working_directory):
+		# create log file, write start time and date
+		logging.basicConfig(filename='hyperopt.log', level=logging.INFO)
+		logging.info('Starting script at: %s'%(str(datetime.now())))
 		# create output for NeuroNER runs
 		os.makedirs(output_folder, exist_ok=True)
 
@@ -182,5 +201,5 @@ if __name__ == '__main__':
 		max_evals = max_evals	
 		)
 
-	print("Found minimum after {} trials:".format(args.max_evals))
-	print(best)
+	logging.info('FOUND MINIMUM AFTER %s TRIALS\n%s'%(max_evals, best))
+	print("FOUND MINIMUM AFTER {} TRIALS:\n{}".format(args.max_evals, best))
