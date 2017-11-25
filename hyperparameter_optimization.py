@@ -7,9 +7,9 @@ import logging
 import argparse
 import configparser
 
-from split_brat_standoff import split_brat_standoff
 from datetime import datetime
 from hyperopt import pyll, fmin, tpe, hp
+from split_brat_standoff import split_brat_standoff
 
 # https://vooban.com/en/tips-articles-geek-stuff/hyperopt-tutorial-for-optimizing-neural-networks-hyperparameters/
 
@@ -18,6 +18,9 @@ from hyperopt import pyll, fmin, tpe, hp
 
 # this counter marks the current run. 1 = first run, used to avoid updating hyperparameters on our first run
 CURRENT_RUN = 1
+UPDATE_CONFIG = False
+SHUFFLE_DATASET = True
+DATASET_DIR = 
  
 class cd:
     """Context manager for changing the current working directory."""
@@ -32,7 +35,7 @@ class cd:
         os.chdir(self.savedPath) 
 
 def initialize_argparse():
-	'''Initilize and return an argparse object.'''
+	"""Initilize and return an argparse object."""
 	parser = argparse.ArgumentParser(description='Tune the hyperparameters of a NeuroNER model using Hyperopt')
 	# positional arguments
 	parser.add_argument('working_directory', help="Path to the 'src' directory of your NeuroNER install")
@@ -44,7 +47,7 @@ def initialize_argparse():
 	return parser
 
 def extract_f1_score(file_obj):
-	'''Extracts the F1 Score from a given NeuroNER text evaluation file object.'''
+	"""Extracts the F1 Score from a given NeuroNER text evaluation file object."""
 	# preprocess performance metrics for extraction of f1 score
 	performance_metrics = file_obj.readlines()[1].strip()
 	performance_metrics = [line for line in performance_metrics.split(' ') if line != '']
@@ -53,7 +56,8 @@ def extract_f1_score(file_obj):
 	return f1_score
 
 def f1_best_epoch_on_test(hyperopt_run_path):
-	'''Returns the F1 score on test set for best performing epoch as measured on the valid set.'''
+	"""Returns the F1 score on test set for best performing epoch as measured on the valid set."""
+
 	# makes the assumption that NeuroNER only creates one directory at neuroner_run_path
 	neuroner_run_path = os.path.join(hyperopt_run_path, os.listdir(hyperopt_run_path)[0])
 	
@@ -77,7 +81,7 @@ def f1_best_epoch_on_test(hyperopt_run_path):
 	return best_epoch_on_valid, best_f1_on_valid
 
 def update_config(hyperparameters):
-	'''Updates the NeuroNER config file with values in hyperparameters.''' 
+	"""Updates the NeuroNER config file with values in hyperparameters."""
 	config = configparser.ConfigParser()
 	config.read(args.parameter_filepath)
 
@@ -103,10 +107,10 @@ def run_model():
 	param_filepath = args.parameter_filepath
 	os.system('python3 main.py --parameters_filepath {}'.format(param_filepath))
 
-def hyperopt_step(hyperparameters):
-	'''Coordinates one optimzation step: by updating hyperparameters from the space, saving them to the config, 
+def hyperopt_step(hyperparameters, update_config = True):
+	"""Coordinates one optimzation step: by updating hyperparameters from the space, saving them to the config, 
 	running NeuroNER with this config, and then returning the F1 score on the test set from the best performing model 
-	checkpoint (as measured on the validation set).'''
+	checkpoint (as measured on the validation set)."""
 	
 	# TEMPORARY FIX
 	global CURRENT_RUN	
@@ -117,23 +121,29 @@ def hyperopt_step(hyperparameters):
 	hyperparameters['output_folder'] = hyperopt_run_path
 	
 	# if this is the first run, do not update hyperparameters	
-	if CURRENT_RUN == 1: 
+	if not UPDATE_CONFIG or CURRENT_RUN == 1:
 		print("[INFO] First run, will NOT update hyperparameters...") 
-		update_config({'output_folder':hyperopt_run_path}) 
-	else: 
+		# update_config({'output_folder':hyperopt_run_path}) 	
+	else:
 		print("[INFO] Updating hyperparameters...")
-		update_config(hyperparameters)	
-
+		update_config(hyperparameters) 
+		
 	print("[INFO] Running model...")
 	run_model()
 
+	if SHUFFLE_DATASET:
+		shuffle_dataset()
+		
 	# update run counter
-	# CURRENT_RUN += 1
+	CURRENT_RUN += 1
 	
 	# maximize f1 by minimizing 100 - f1
 	print("[INFO] Getting F1 score on valid from best performing epoch...")
 	best_epoch_on_valid, best_f1_score = f1_best_epoch_on_test(hyperopt_run_path)
-	logging.info("Best performing epoch (%s): F1 score on valid: %s for hyperparameters: %s" % (best_epoch_on_valid, best_f1_score, hyperparameters))	
+	if UPDATE_CONFIG:
+		logging.info("Best performing epoch (%s): F1 score on valid: %s for hyperparameters: %s" % (best_epoch_on_valid, best_f1_score, hyperparameters))	
+	elif not UPDATE_CONFIG:
+		logging.info("Best performing epoch (%s): F1 score on valid: %s" % (best_epoch_on_valid, best_f1_score))
 
 	return best_f1_score	
 
@@ -164,6 +174,14 @@ def objective(space):
 	minimization_objective = 100 - f1_score_on_step
 	
 	return minimization_objective
+
+def shuffle_dataset():
+	os.sytem('cp {} {}'.format(DATASET_DIR, DATASET_DIR + '_tmp'))
+	split_brat_standoff(DATASET_DIR + '_tmp')
+	os.sytem('mv {} {}'.format(DATASET_DIR + '_tmp', DATASET_DIR + '_split'))
+
+
+
 
 def stochastic_sample(space):
 	'''Print a few random (stochastic) samples from the space.'''
