@@ -9,13 +9,10 @@ import configparser
 
 from datetime import datetime
 from hyperopt import pyll, fmin, tpe, hp
-from split_brat_standoff import split_brat_standoff
 
-# https://vooban.com/en/tips-articles-geek-stuff/hyperopt-tutorial-for-optimizing-neural-networks-hyperparameters/
+# script developed with instructions from here: https://vooban.com/en/tips-articles-geek-stuff/hyperopt-tutorial-for-optimizing-neural-networks-hyperparameters/
 
-# thats it... the last thing to figure out is how many cycles to run. depends on training time
-
-# this counter marks the current run. 1 = first run, used to avoid updating hyperparameters on our first run
+# (TEMP FIX) this counter marks the current run. 1 = first run, used to avoid updating hyperparameters on our first run
 CURRENT_RUN = 1
 UPDATE_CONFIG = True
 
