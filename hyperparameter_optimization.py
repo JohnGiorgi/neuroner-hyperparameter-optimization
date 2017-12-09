@@ -15,13 +15,10 @@ from split_brat_standoff import split_brat_standoff
 
 # thats it... the last thing to figure out is how many cycles to run. depends on training time
 
-
 # this counter marks the current run. 1 = first run, used to avoid updating hyperparameters on our first run
 CURRENT_RUN = 1
-UPDATE_CONFIG = False
-SHUFFLE_DATASET = True
-DATASET_DIR = 
- 
+UPDATE_CONFIG = True
+
 class cd:
     """Context manager for changing the current working directory."""
     def __init__(self, newPath):
@@ -32,7 +29,7 @@ class cd:
         os.chdir(self.newPath)
 
     def __exit__(self, etype, value, traceback):
-        os.chdir(self.savedPath) 
+        os.chdir(self.savedPath)
 
 def initialize_argparse():
 	"""Initilize and return an argparse object."""
@@ -60,7 +57,7 @@ def f1_best_epoch_on_test(hyperopt_run_path):
 
 	# makes the assumption that NeuroNER only creates one directory at neuroner_run_path
 	neuroner_run_path = os.path.join(hyperopt_run_path, os.listdir(hyperopt_run_path)[0])
-	
+
 	with cd(neuroner_run_path):
 		# set defaults
 		best_f1_on_valid = 0
@@ -76,7 +73,7 @@ def f1_best_epoch_on_test(hyperopt_run_path):
 					if current_f1_score_on_valid > best_f1_on_valid:
 						best_f1_on_valid = current_f1_score_on_valid
 						best_epoch_on_valid = filename.split('_')[0]
-	
+
 	print("[INFO] Best epoch on valid ({}) had F1 score: {}".format(best_epoch_on_valid, best_f1_on_valid))
 	return best_epoch_on_valid, best_f1_on_valid
 
@@ -98,7 +95,7 @@ def update_config(hyperparameters):
 
 	for hp in hyperparameters:
 		config[parameter_file_headers[hp]][hp] = str(hyperparameters[hp])
-	
+
 	with open(param_filepath, 'w') as configfile:
 		config.write(configfile)
 
@@ -108,44 +105,41 @@ def run_model():
 	os.system('python3 main.py --parameters_filepath {}'.format(param_filepath))
 
 def hyperopt_step(hyperparameters, update_config = True):
-	"""Coordinates one optimzation step: by updating hyperparameters from the space, saving them to the config, 
-	running NeuroNER with this config, and then returning the F1 score on the test set from the best performing model 
+	"""Coordinates one optimzation step: by updating hyperparameters from the space, saving them to the config,
+	running NeuroNER with this config, and then returning the F1 score on the test set from the best performing model
 	checkpoint (as measured on the validation set)."""
-	
+
 	# TEMPORARY FIX
-	global CURRENT_RUN	
-	
+	global CURRENT_RUN
+
 	# create a new output directory for NeuroNER run
 	hyperopt_run_path = os.path.join(output_folder, 'hyperopt_run_{}'.format(datetime.now().strftime("%y-%m-%d-%H-%M")))
 	os.makedirs(hyperopt_run_path, exist_ok=True)
 	hyperparameters['output_folder'] = hyperopt_run_path
-	
-	# if this is the first run, do not update hyperparameters	
+
+	# if this is the first run, do not update hyperparameters
 	if not UPDATE_CONFIG or CURRENT_RUN == 1:
-		print("[INFO] First run, will NOT update hyperparameters...") 
-		# update_config({'output_folder':hyperopt_run_path}) 	
+		print("[INFO] First run, will NOT update hyperparameters...")
+		# update_config({'output_folder':hyperopt_run_path})
 	else:
 		print("[INFO] Updating hyperparameters...")
-		update_config(hyperparameters) 
-		
+		update_config(hyperparameters)
+
 	print("[INFO] Running model...")
 	run_model()
 
-	if SHUFFLE_DATASET:
-		shuffle_dataset()
-		
 	# update run counter
 	CURRENT_RUN += 1
-	
+
 	# maximize f1 by minimizing 100 - f1
 	print("[INFO] Getting F1 score on valid from best performing epoch...")
 	best_epoch_on_valid, best_f1_score = f1_best_epoch_on_test(hyperopt_run_path)
 	if UPDATE_CONFIG:
-		logging.info("Best performing epoch (%s): F1 score on valid: %s for hyperparameters: %s" % (best_epoch_on_valid, best_f1_score, hyperparameters))	
+		logging.info("Best performing epoch (%s): F1 score on valid: %s for hyperparameters: %s" % (best_epoch_on_valid, best_f1_score, hyperparameters))
 	elif not UPDATE_CONFIG:
 		logging.info("Best performing epoch (%s): F1 score on valid: %s" % (best_epoch_on_valid, best_f1_score))
 
-	return best_f1_score	
+	return best_f1_score
 
 def objective(space):
 	'''Returns the F1 score of the model for the current hyperparameter values.
@@ -172,40 +166,32 @@ def objective(space):
 	f1_score_on_step = hyperopt_step(current_hyperparams)
 	# maximize f1 by minimizing 100 - f1
 	minimization_objective = 100 - f1_score_on_step
-	
+
 	return minimization_objective
-
-def shuffle_dataset():
-	os.sytem('cp {} {}'.format(DATASET_DIR, DATASET_DIR + '_tmp'))
-	split_brat_standoff(DATASET_DIR + '_tmp')
-	os.sytem('mv {} {}'.format(DATASET_DIR + '_tmp', DATASET_DIR + '_split'))
-
-
-
 
 def stochastic_sample(space):
 	'''Print a few random (stochastic) samples from the space.'''
-	pp = pprint.PrettyPrinter(indent=4, width=100) 
+	pp = pprint.PrettyPrinter(indent=4, width=100)
 	for _ in range(10):
 		pp.pprint(pyll.stochastic.sample(space))
 	sys.exit()
 
 if __name__ == '__main__':
-	
+
 	################################### change parameters here ###################################
 	# hyperparameter space to optmize
 	space = {
-	
+
 	# [ann]
 	# use this to tune both the char embedding dimension and the char_lstm_hidden state dimension
 	'character_embedding_dimension': hp.quniform('character_embedding_dimension', 10, 80, 1),
-		
+
 	# [training]
 	'learning_rate': hp.uniform('learning_rate', 0.001, 0.01),
 	'gradient_clipping_value': hp.randint('gradient_clipping_value', 6),
 	'dropout_rate': hp.uniform('dropout_rate', 0.2, 0.8),
 	# [advanced]
-	'tagging_format': hp.choice('tagging_format', ['bioes', 'bio'])	
+	'tagging_format': hp.choice('tagging_format', ['bioes', 'bio'])
 	}
 
 	################################################################################################
@@ -220,7 +206,7 @@ if __name__ == '__main__':
 	output_folder = str(args.output_folder) # path to save NeuroNER runs
 	working_directory = str(args.working_directory) # path to top level of NeuroNEr install
 	max_evals = int(args.max_evals) # max number of evaluations to perform during optimization
-	
+
 	# move into src directory of NeuroNER install
 	with cd(working_directory):
 		# create log file, write start time and date
@@ -234,7 +220,7 @@ if __name__ == '__main__':
 		fn = objective, # the objective function to minimize
 		space = space,
 		algo = tpe.suggest,
-		max_evals = max_evals	
+		max_evals = max_evals
 		)
 
 	logging.info('FOUND MINIMUM AFTER %s TRIALS\n%s'%(max_evals, best))
