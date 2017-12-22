@@ -21,6 +21,17 @@ python hyperparameter_optimization.py path/to/NeuroNER/src
 
 > Note that it can get a little messy if your provide a path to a config file not in `path/to/NeuroNER/src`. It is best to just save a config file called `hyperopt_parameters.ini` in `src` and use relative paths in the config.
 
+##### Shuffling data
+
+On same datasets, particularly small ones, a bad random shuffle can lead to poor performance. Passing the `--shuffle` flag will randomly re-split the data on each run,
+allowing for the search of the shuffle that lead to the highest performance on the valid set.
+
+To use, the dataset must be `.tar.gz` zipped. The `tar` file must have the same name as the zipped folder, and the `tar.gz` file must be placed in `../path/to/NeuroNER/data`.
+
+_For example_:
+
+Directory `S800` must be `.tar.gz` zipped to `S800.tar.gz`. Then move `S800.tar.gz` to `../path/to/NeuroNER/data/S800.tar.gz`.
+
 ##### Sampling the hyperparameter space
 
 If you want to get a feel for the hyperparameter space, you can print a few random (stochastic) samples from the space by calling the script with the optional flag `-stochastic_sample` or `-ss` for short. *e.g.*
